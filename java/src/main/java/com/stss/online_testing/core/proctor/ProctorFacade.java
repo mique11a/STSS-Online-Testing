@@ -24,6 +24,7 @@ import com.stss.online_testing.core.redis.ProctorControllerClient;
 import com.stss.online_testing.service.IExamPaperService;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -350,17 +351,58 @@ public class ProctorFacade {
         return data;
     }
 
-    private Page<StudentExamRecord> listMyExamRecords(StorageCommand command) {
+    private Map<String, Object> listMyExamRecords(StorageCommand command) {
         requireStudent(command);
 
         int current = getInteger(command.getPayload(), "current", 1);
         int size = getInteger(command.getPayload(), "size", 10);
         validatePageParams(current, size);
+        Long studentId = command.getOperatorId();
 
-        Page<StudentExamRecord> page = new Page<>(current, size);
-        QueryWrapper<StudentExamRecord> wrapper = new QueryWrapper<>();
-        wrapper.eq("student_id", command.getOperatorId()).eq("status", 1).orderByDesc("submit_time");
-        return studentExamRecordMapper.selectPage(page, wrapper);
+        // 1. 查所有已发布且在有效期内的试卷
+        QueryWrapper<ExamPaper> paperWrapper = new QueryWrapper<>();
+        paperWrapper.eq("status", 1)
+                .and(w -> w.isNull("valid_end_time").or().gt("valid_end_time", new Date()))
+                .orderByDesc("create_time");
+        Page<ExamPaper> paperPage = examPaperMapper.selectPage(new Page<>(current, size), paperWrapper);
+
+        // 2. 批量查该学生对应这些试卷的考试记录
+        Map<Long, StudentExamRecord> recordMap = new HashMap<>();
+        List<Long> examIds = paperPage.getRecords().stream().map(ExamPaper::getId).toList();
+        if (!examIds.isEmpty()) {
+            QueryWrapper<StudentExamRecord> recordWrapper = new QueryWrapper<>();
+            recordWrapper.eq("student_id", studentId).in("exam_id", examIds);
+            List<StudentExamRecord> records = studentExamRecordMapper.selectList(recordWrapper);
+            recordMap = records.stream()
+                    .collect(Collectors.toMap(StudentExamRecord::getExamId, r -> r, (a, b) -> a));
+        }
+
+        // 3. 组装返回数据
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (ExamPaper paper : paperPage.getRecords()) {
+            StudentExamRecord record = recordMap.get(paper.getId());
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("examId", paper.getId());
+            item.put("examTitle", paper.getTitle());
+            item.put("totalScore", paper.getTotalScore());
+            item.put("durationMins", paper.getDurationMins());
+            item.put("validStartTime", paper.getValidStartTime());
+            item.put("validEndTime", paper.getValidEndTime());
+            item.put("paperStatus", paper.getStatus());
+            item.put("recordId", record == null ? null : record.getId());
+            item.put("recordStatus", record == null ? null : record.getStatus());
+            item.put("studentScore", record == null ? null : record.getTotalScore());
+            item.put("submitTime", record == null ? null : record.getSubmitTime());
+            items.add(item);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("records", items);
+        result.put("total", paperPage.getTotal());
+        result.put("size", paperPage.getSize());
+        result.put("current", paperPage.getCurrent());
+        result.put("pages", paperPage.getPages());
+        return result;
     }
 
     private StudentExamRecord resolveDraftRecord(
