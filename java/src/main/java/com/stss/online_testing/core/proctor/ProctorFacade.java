@@ -327,6 +327,7 @@ public class ProctorFacade {
             Map<String, Object> detail = new LinkedHashMap<>();
             detail.put("questionId", relation.getQuestionId());
             detail.put("sortOrder", relation.getSortOrder());
+            detail.put("type", question == null ? null : question.getType());
             detail.put("stem", question == null ? null : question.getStem());
             detail.put("options", question == null ? List.of() : question.getOptions());
             detail.put("studentAnswer", answer == null ? null : answer.getStudentAnswer());
