@@ -1,7 +1,5 @@
 FROM docker.m.daocloud.io/library/golang:1.26-alpine AS builder
 
-ENV GOPROXY=https://goproxy.cn,direct
-
 WORKDIR /app
 
 COPY go.mod go.sum ./
