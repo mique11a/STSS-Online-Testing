@@ -117,6 +117,7 @@ public class ProctorFacade {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("recordId", draft.getId());
         data.put("startedAt", draft.getCreateTime());
+        data.put("validEndTime", examPaper.getValidEndTime());
         data.put("attemptsUsed", submittedCount);
         data.put("remainingAttempts", Math.max(config.getAllowedAttempts() - submittedCount, 0));
         data.put("paper", paper);
